@@ -61,18 +61,33 @@ jobs:
       - uses: azure/setup-helm@v4
         with:
           version: ${{ env.HELM_VERSION }}
+      # Docker credentials for the attestation push, Helm's for the chart.
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - run: helm registry login ghcr.io -u "$ACTOR" --password-stdin <<<"$TOKEN"
         env:
           ACTOR: ${{ github.actor }}
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - id: push
+        name: Package and push to GHCR (OCI), with retries
         run: |
           version="${GITHUB_REF_NAME#v}"
           helm package "charts/${CHART}" --version "$version" --destination dist
-          helm push "dist/${CHART}-${version}.tgz" "oci://${REGISTRY}" 2>&1 | tee push.log
-          digest=$(sed -nE 's/^Digest: (sha256:[0-9a-f]{64})$/\1/p' push.log)
-          [ -n "$digest" ] || { echo "::error::no digest in helm push output"; exit 1; }
-          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          for wait in 15 30 0; do
+            if out=$(helm push "dist/${CHART}-${version}.tgz" "oci://${REGISTRY}" 2>&1); then
+              echo "$out"
+              digest=$(sed -nE 's/^Digest: (sha256:[0-9a-f]{64})$/\1/p' <<<"$out")
+              [ -n "$digest" ] || { echo "::error::no digest in helm push output"; exit 1; }
+              echo "digest=$digest" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "$out"
+            [ "$wait" -gt 0 ] && { echo "push failed, retrying in ${wait}s"; sleep "$wait"; }
+          done
+          exit 1
         env:
           CHART: ${{ matrix.chart }}
       - uses: actions/attest-build-provenance@v2
