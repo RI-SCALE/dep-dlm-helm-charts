@@ -24,12 +24,12 @@ now.
 
 ## Developing
 
-Needs Helm, Make and pre-commit; the devcontainer has all three.
+Needs Helm, kubeconform, Make and pre-commit; the devcontainer has all four.
 
 ```bash
 make hooks   # install the pre-commit hook
 make check   # pre-commit on all files
-make lint    # helm lint --strict and kubeconform for every chart
+make lint    # helm lint --strict and kubeconform, defaults and ci/ values
 make help    # all targets
 ```
 
@@ -37,7 +37,6 @@ Or with Helm directly:
 
 ```bash
 helm lint --strict charts/fts
-helm template fts charts/fts -f charts/fts/ci/default-values.yaml
 ```
 
 ## Releasing
@@ -55,6 +54,7 @@ git tag v0.1.0 && git push origin v0.1.0
 | `v0.1.0` | `0.1.0` (all charts) |
 
 Charts are versioned together; a release can contain unchanged charts.
+The `version` in each `Chart.yaml` is replaced by the tag at release time.
 
 Verify a chart:
 
