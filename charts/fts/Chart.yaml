@@ -1,0 +1,10 @@
+apiVersion: v2
+name: fts
+description: FTS3 server (File Transfer Service) using the dep-dlm-containers fts image
+type: application
+version: 0.1.0
+appVersion: "3.14.4-dep.0.1.0"
+keywords:
+  - rucio
+  - fts
+  - transfer
