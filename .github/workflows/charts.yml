@@ -1,0 +1,82 @@
+name: charts
+
+# Pull requests and main lint every chart (pre-commit: YAML checks,
+# helm lint --strict and kubeconform). Releases call this workflow with
+# publish: true: each chart is packaged as the tag's version (vX.Y.Z ->
+# X.Y.Z), pushed to oci://ghcr.io/ri-scale/charts/dep-dlm/<chart> and
+# given a build provenance attestation.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_call:
+    inputs:
+      publish:
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  REGISTRY: ghcr.io/ri-scale/charts/dep-dlm
+  # Keep in step with .devcontainer/.
+  HELM_VERSION: v4.2.3
+  KUBECONFORM_VERSION: 0.7.0
+
+jobs:
+  check:
+    name: lint (helm, kubeconform, YAML)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: azure/setup-helm@v4
+        with:
+          version: ${{ env.HELM_VERSION }}
+      - run: |
+          curl -fsSL "https://github.com/yannh/kubeconform/releases/download/v${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz" \
+            | sudo tar -xz -C /usr/local/bin kubeconform
+      - run: pip install pre-commit
+      - run: make check
+
+  publish:
+    if: inputs.publish
+    needs: check
+    name: publish ${{ matrix.chart }}
+    strategy:
+      fail-fast: false
+      matrix:
+        chart: [fts, observability, opa]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+        with:
+          version: ${{ env.HELM_VERSION }}
+      - run: helm registry login ghcr.io -u "$ACTOR" --password-stdin <<<"$TOKEN"
+        env:
+          ACTOR: ${{ github.actor }}
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - id: push
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          helm package "charts/${CHART}" --version "$version" --destination dist
+          helm push "dist/${CHART}-${version}.tgz" "oci://${REGISTRY}" 2>&1 | tee push.log
+          digest=$(sed -nE 's/^Digest: (sha256:[0-9a-f]{64})$/\1/p' push.log)
+          [ -n "$digest" ] || { echo "::error::no digest in helm push output"; exit 1; }
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+        env:
+          CHART: ${{ matrix.chart }}
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ matrix.chart }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
