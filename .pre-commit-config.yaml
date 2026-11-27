@@ -1,0 +1,21 @@
+# Checks only; nothing here rewrites files.
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+        # Helm templates are not plain YAML.
+        exclude: ^charts/[^/]+/templates/
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-added-large-files
+
+  - repo: local
+    hooks:
+      - id: helm-lint
+        name: helm lint and kubeconform
+        entry: make lint
+        language: system
+        files: ^charts/
+        pass_filenames: false

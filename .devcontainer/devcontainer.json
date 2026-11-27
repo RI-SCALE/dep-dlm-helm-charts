@@ -1,0 +1,13 @@
+{
+  "name": "dep-dlm-helm-charts",
+  "image": "python:3.12-bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/kubectl-helm-minikube:1": {
+      "version": "none",
+      "helm": "4.2.3",
+      "minikube": "none"
+    },
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+  "postCreateCommand": "bash .devcontainer/post-create.sh"
+}
